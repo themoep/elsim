@@ -35,7 +35,6 @@ from elsim.dalvik import (
 import elsim
 from elsim.utils import load_analysis
 
-
 def check_one_file(dx1, dx2, FS, threshold, compressor, details, view_strings, new, deleted, diff, score):
     """
     Show similarities between two dalvik containers
@@ -51,6 +50,10 @@ def check_one_file(dx1, dx2, FS, threshold, compressor, details, view_strings, n
     :param bool diff: display the difference
     :param bool score: only print the score
     """
+    #from pyinstrument import Profiler
+    #profiler = Profiler()
+    #profiler.start()
+
     el = Elsim(ProxyDalvik(dx1), ProxyDalvik(dx2), FS, threshold, compressor)
     if score:
         click.echo("Methods: {:7.4f}".format(el.get_similarity_value(new, deleted)))
@@ -76,6 +79,9 @@ def check_one_file(dx1, dx2, FS, threshold, compressor, details, view_strings, n
             eld = Eldiff(ProxyDalvikBasicBlock(elb), FILTERS_DALVIK_DIFF_BB)
             ddm = DiffDalvikMethod(i, j, elb, eld)
             ddm.show()
+
+    #profiler.stop()
+    #print(profiler.output_text(unicode=True, color=True))
 
 
 @click.command()

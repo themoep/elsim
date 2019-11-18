@@ -18,6 +18,12 @@
 
 import logging
 from collections import defaultdict
+from multiprocessing import Pool, cpu_count
+from elsim.similarity import libsimilarity as ls
+from operator import attrgetter
+
+import mmh3
+
 from elsim.similarity import Similarity, Compress
 
 ELSIM_VERSION = 0.2
@@ -305,7 +311,7 @@ class Elsim:
 
         # Starts to add all elements from the two iterators
         # to the filter structure and calculate hashes for all elements.
-        self.__init_index_elements(self.e1)
+        self.__init_index_elements(self.e1) # THIS TAKES THE LONG TIME
         self.__init_index_elements(self.e2)
 
         # get all identical items and calculate similarity
@@ -335,9 +341,15 @@ class Elsim:
             # Create the Checksum object, which might transform the content
             # and is used to calculate distances and checksum.
             # Hash the content and add the hash to our list of known hashes
-            self.__hashes[iterable].add(e.hash)
+            #self.__hashes[iterable].add(e.hash)
             # Add it to the reverse lookup
             self.ref_set_ident[iterable][e.hash].add(e)
+
+        with Pool(processes=cpu_count()) as pool:
+            execfun = mmh3.hash128
+            input = map(lambda e: e.checksum.get_buff(), self.__elements[iterable])
+            self.__hashes[iterable].update(pool.map_async(execfun, input).get(None))
+
 
     def _init_similarity(self):
         """
@@ -364,13 +376,26 @@ class Elsim:
         # Hence, we create a similarity matrix with size n * m
         # where n is the number of different items in e1
         # and m is the number of different items in e2
+        #for j in [next(iter(self.ref_set_ident[self.e1][i])) for i in to_test]:
+        #    self.filters[SIMILARITY_ELEMENTS][j] = dict()
+        #    for k in available_e2_elements:
+        #        # Calculate and store the similarity between j and k
+        #        self.filters[SIMILARITY_ELEMENTS][j][k] = self.__base[FILTER_SIM_METH](self.sim, j, k)
+
+        #    # Store, that j has similar elements
+        #    if j.hash not in self.filters[HASHSUM_SIMILAR_ELEMENTS]:
+        #        self.filters[SIMILAR_ELEMENTS].add(j)
+        #        self.filters[HASHSUM_SIMILAR_ELEMENTS].append(j.hash)
+
+        # FILTER_SIM_METH: lambda sim, e1, e2: sim.ncd(e1.checksum.get_signature(), e2.checksum.get_signature()),
         for j in [next(iter(self.ref_set_ident[self.e1][i])) for i in to_test]:
             self.filters[SIMILARITY_ELEMENTS][j] = dict()
-            for k in available_e2_elements:
-                # Calculate and store the similarity between j and k
-                self.filters[SIMILARITY_ELEMENTS][j][k] = self.__base[FILTER_SIM_METH](self.sim, j, k)
-
-            # Store, that j has similar elements
+            with Pool(processes=cpu_count()) as pool:
+                input = [k3.checksum.get_signature() for k3 in available_e2_elements]
+                j2 = j.checksum.get_signature()
+                nlist = [n for n,_,_ in pool.starmap(ls.ncd, zip([9]*len(input), [j2]*len(input), input))]
+                for k, kr in zip(available_e2_elements, nlist):
+                    self.filters[SIMILARITY_ELEMENTS][j][k] = kr
             if j.hash not in self.filters[HASHSUM_SIMILAR_ELEMENTS]:
                 self.filters[SIMILAR_ELEMENTS].add(j)
                 self.filters[HASHSUM_SIMILAR_ELEMENTS].append(j.hash)
